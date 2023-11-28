@@ -147,7 +147,7 @@ case (2)
    endif
 end select
 
-    print *, "dudt_rad=", dudt_rad, "dudti_cool=", dudti_cool,'dudti_sph=',dudti_sph
+!    print *, "dudt_rad=", dudt_rad, "dudti_cool=", dudti_cool,'dudti_sph=',dudti_sph
  if (isnan(dudti_cool)) then
     print *, "kappaBari=",kappaBari, "kappaParti=",kappaParti
     print *, "rhoi=",rhoi, "Ti=", Ti
