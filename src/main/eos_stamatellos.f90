@@ -16,7 +16,7 @@ module eos_stamatellos
 !
 ! :Dependencies: datafiles, part
 !
-
+ use units,    only:unit_density,unit_ergg,unit_opacity
  implicit none
  real,allocatable,public :: optable(:,:,:)
  real,allocatable,public :: Gpot_cool(:), gradP_cool(:) !==gradP/rho
@@ -72,8 +72,6 @@ subroutine read_optab(eos_file,ierr)
     enddo
  enddo
  print *, 'nx,ny=', nx, ny
- print *, "Optable first row:"
- print *, (OPTABLE(1,1,i),i=1, 6)
 end subroutine read_optab
 
 !
@@ -82,23 +80,26 @@ end subroutine read_optab
 subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  real, intent(in)  :: ui,rhoi
  real, intent(out) :: kappaBar,kappaPart,Ti,gmwi
-
  integer i,j
- real m,c
+ real m,c,rhoicgs,uicgs
  real kbar1,kbar2
  real kappa1,kappa2
  real Tpart1,Tpart2
  real gmw1,gmw2
  real ui_, rhoi_,rhomin,umin
 
+ ! convert ui and rhoi to physical units
+ uicgs = ui * unit_ergg
+ rhoicgs = rhoi * unit_density
+
  rhomin = OPTABLE(1,1,1)
  umin = OPTABLE(1,1,3)
  ! interpolate through OPTABLE to find corresponding kappaBar, kappaPart and T
 
- if (rhoi <  rhomin) then
+ if (rhoicgs <  rhomin) then
     rhoi_ = rhomin
  else
-    rhoi_ = rhoi
+    rhoi_ = rhoicgs
  endif
 
  i = 1
@@ -106,10 +107,10 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
     i = i + 1
  enddo
 
- if (ui < umin) then
+ if (uicgs < umin) then
     ui_ = umin
  else
-    ui_ = ui
+    ui_ = uicgs
  endif
 
  j = 1
@@ -138,7 +139,7 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  gmw1 = m*ui_ + c
 
  j = 1
- do while ((OPTABLE(i,j,3) <= ui).and.(j < ny))
+ do while ((OPTABLE(i,j,3) <= uicgs).and.(j < ny))
     j = j + 1
  enddo
 
@@ -183,24 +184,28 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  c = gmw2 - m*OPTABLE(i,1,1)
 
  gmwi = m*rhoi_ + c
-
+ 
+ ! return kappaBar and KappaPart in code units
+ kappaBar = kappaBar / unit_opacity
+ kappaPart = kappaPart /unit_opacity
 end subroutine getopac_opdep
 
 subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
  real, intent(out) :: ueqi
  real, intent(in)    :: Teqi,rhoi
-
- real u1, u2
+ real u1, u2, rhoicgs
  real m, c
  integer i, j
  real rhoi_
 
+ ! convert rhoi to physical units
+ rhoicgs = rhoi * unit_density
  ! interpolate through OPTABLE to obtain equilibrium internal energy
 
- if (rhoi < 1.0e-24) then
+ if (rhoicgs < 1.0e-24) then
     rhoi_ = 1.0e-24
  else
-    rhoi_ = rhoi
+    rhoi_ = rhoicgs
  endif
 
  i = 1
@@ -232,6 +237,8 @@ subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
  c = u2 - m*OPTABLE(i,1,1)
 
  ueqi = m*rhoi_ + c
+ ! return uequi in code units
+ ueqi = ueqi / unit_ergg
 end subroutine getintenerg_opdep
 
 end module eos_stamatellos
