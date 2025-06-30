@@ -241,7 +241,7 @@ subroutine write_fulldump(t,dumpfile,ntotal,iorder,sphNG)
           endif
        endif
        ! write stamatellos cooling values
-       if (icooling == 9) then
+       if (icooling == 9 .and. size(ueqi_store) > 0) then
           call write_array(1,ueqi_store,'ueqi',npart,k,ipass,idump,nums,nerr)
           call write_array(1,ttherm_store,'ttherm',npart,k,ipass,idump,nums,nerr)
           call write_array(1,tau_store,'taumean',npart,k,ipass,idump,nums,nerr)
@@ -1102,10 +1102,10 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
                 call read_array(dust_temp,'Tdust',got_Tdust,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              endif
              call read_array(eos_vars,eos_vars_label,got_eosvars,ik,i1,i2,noffset,idisk1,tag,match,ierr)
-             call read_array(ttherm_store,'ttherm',got_ttherm,ik,i1,i2,noffset,idisk1,tag,match,ierr)
-             call read_array(ueqi_store,'ueqi',got_ueqi,ik,i1,i2,noffset,idisk1,tag,match,ierr)
-             call read_array(tau_store,'taumean',got_taumean,ik,i1,i2,noffset,idisk1,tag,match,ierr)
-             call read_array(du_store,'dudt',got_dudt,ik,i1,i2,noffset,idisk1,tag,match,ierr)
+!             call read_array(ttherm_store,'ttherm',got_ttherm,ik,i1,i2,noffset,idisk1,tag,match,ierr)
+ !            call read_array(ueqi_store,'ueqi',got_ueqi,ik,i1,i2,noffset,idisk1,tag,match,ierr)
+  !           call read_array(tau_store,'taumean',got_taumean,ik,i1,i2,noffset,idisk1,tag,match,ierr)
+   !          call read_array(du_store,'dudt',got_dudt,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              if (maxalpha==maxp) call read_array(alphaind,(/'alpha'/),got_alpha,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              !
              ! read divcurlv if it is in the file

@@ -122,7 +122,7 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  real, intent(in)  :: ui,rhoi
  real, intent(out) :: kappaBar,kappaPart,Ti,gmwi
 
- integer i,j
+ integer i,j,irho,iu
  real m,c
  real kbar1,kbar2
  real kappa1,kappa2
@@ -133,15 +133,23 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  rhomin = OPTABLE(1,1,1)
  umin = OPTABLE(1,1,3)
  ! interpolate through OPTABLE to find corresponding kappaBar, kappaPart and T
-
+ 
  ! check values are in range of tables
- if (rhoi > OPTABLE(nx,1,1) .or. rhoi < OPTABLE(1,1,1)) then
-    print *, "optable rho min =", rhomin
+ if (rhoi > OPTABLE(nx-1,1,1) ) then
+    print *, "optable rho max =", optable(nx,1,1)    
     call fatal('getopac_opdep','rhoi out of range. Collapsing clump?',var='rhoi',val=rhoi)
- elseif (ui > OPTABLE(1,ny,3) .or. ui < OPTABLE(1,1,3)) then
+ elseif  (rhoi < OPTABLE(1,1,1)) then
+    print *, "optable rho min =", rhomin    
+    call fatal('getopac_opdep','rhoi below range of EOS table.',var='rhoi',val=rhoi)
+ elseif (ui > OPTABLE(1,ny-1,3) .or. ui < OPTABLE(1,1,3)) then
     call fatal('getopac_opdep','ui out of range',var='ui',val=ui)
  endif
 
+ ! Find index of rhoi in table such that array(ind) < rhoi < array(ind+1)
+! print *, "search for rhoi"
+ irho = search_table(optable(:,1,1),nx,rhoi)
+ !print *, "irho=", irho
+! \/ old method
  if (rhoi <  rhomin) then
     rhoi_ = rhomin
  else
@@ -152,7 +160,12 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  do while((OPTABLE(i,1,1) <= rhoi_).and.(i < nx))
     i = i + 1
  enddo
+ !/\ old method
+ 
+! print *, "rho RESULT: irho=",irho,"i=",i,"rhoi=",rhoi 
+ iu = search_table(optable(irho,:,3),ny,ui)
 
+ !\/ old method
  if (ui < umin) then
     ui_ = umin
  else
@@ -163,71 +176,109 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  do while ((OPTABLE(i-1,j,3) <= ui_).and.(j < ny))
     j = j + 1
  enddo
+ !/\ old method
+ 
+ !print *, "ui RESULT: iu=",iu,"j=",j,"ui=",ui 
 
- m = (OPTABLE(i-1,j-1,5) - OPTABLE(i-1,j,5))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
- c = OPTABLE(i-1,j,5) - m*OPTABLE(i-1,j,3)
+! m = (OPTABLE(i-1,j-1,5) - OPTABLE(i-1,j,5))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
+! c = OPTABLE(i-1,j,5) - m*OPTABLE(i-1,j,3)
 
- kbar1 = m*ui_ + c
+! kbar1 = m*ui_ + c
 
- m = (OPTABLE(i-1,j-1,6) - OPTABLE(i-1,j,6))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
- c = OPTABLE(i-1,j,6) - m*OPTABLE(i-1,j,3)
+ m = (optable(irho,iu,5)-optable(irho,iu+1,5))/(optable(irho,iu,3)-optable(irho,iu+1,3))
+ c = optable(irho,iu+1,5) - m*optable(irho,iu+1,3)
+ kbar1 = m*ui + c
+ 
+ !m = (OPTABLE(i-1,j-1,6) - OPTABLE(i-1,j,6))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
+ !c = OPTABLE(i-1,j,6) - m*OPTABLE(i-1,j,3)
+ !kappa1 = m*ui_ + c
 
- kappa1 = m*ui_ + c
+ m = (optable(irho,iu,6)-optable(irho,iu+1,6))/(optable(irho,iu,3)-optable(irho,iu+1,3))
+ c = optable(irho,iu+1,6) - m*optable(irho,iu+1,3)
+ kappa1 = m*ui + c
+ 
+! m = (OPTABLE(i-1,j-1,2) - OPTABLE(i-1,j,2))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
+! c = OPTABLE(i-1,j,2) - m*OPTABLE(i-1,j,3)
+ !Tpart1 = m*ui_ + c
 
- m = (OPTABLE(i-1,j-1,2) - OPTABLE(i-1,j,2))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
- c = OPTABLE(i-1,j,2) - m*OPTABLE(i-1,j,3)
+ m = (optable(irho,iu,2) - optable(irho,iu+1,2))/(optable(irho,iu,3)-optable(irho,iu+1,3))
+ c = optable(irho,iu+1,2) - m*optable(irho,iu+1,3)
+ Tpart1 = m*ui + c
 
- Tpart1 = m*ui_ + c
+! m = (OPTABLE(i-1,j-1,4) - OPTABLE(i-1,j,4))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
+! c = OPTABLE(i-1,j,4) - m*OPTABLE(i-1,j,3)
+ ! gmw1 = m*ui_ + c
 
- m = (OPTABLE(i-1,j-1,4) - OPTABLE(i-1,j,4))/(OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))
- c = OPTABLE(i-1,j,4) - m*OPTABLE(i-1,j,3)
+ m = (OPTABLE(irho,iu,4) - OPTABLE(irho,iu+1,4))/(OPTABLE(irho,iu,3)-OPTABLE(irho,iu+1,3))
+ c = OPTABLE(irho,iu+1,4) - m*OPTABLE(irho,iu+1,3)
+ gmw1 = m*ui + c
 
- gmw1 = m*ui_ + c
+ ! Search for ui in irho+1 list for interpolation
+ iu = search_table(optable(irho+1,:,3),ny,ui)
 
- j = 2
- do while ((OPTABLE(i,j,3) <= ui).and.(j < ny))
-    j = j + 1
- enddo
+ !j = 2
+ !do while ((OPTABLE(i,j,3) <= ui).and.(j < ny))
+ !   j = j + 1
+ !enddo
 
- m = (OPTABLE(i,j-1,5) - OPTABLE(i,j,5))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
- c = OPTABLE(i,j,5) - m*OPTABLE(i,j,3)
+ !m = (OPTABLE(i,j-1,5) - OPTABLE(i,j,51))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
+ !c = OPTABLE(i,j,5) - m*OPTABLE(i,j,3)
+ !kbar2 = m*ui_ + c
 
- kbar2 = m*ui_ + c
+ m = (OPTABLE(irho+1,iu,5) - OPTABLE(irho+1,iu+1,5))/(OPTABLE(irho+1,iu,3) - OPTABLE(irho+1,iu+1,3))
+ c = OPTABLE(irho+1,iu+1,5) - m*OPTABLE(irho+1,iu+1,3)
+ kbar2 = m*ui + c
 
- m = (OPTABLE(i,j-1,6) - OPTABLE(i,j,6))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
- c = OPTABLE(i,j,6) - m*OPTABLE(i,j,3)
+! m = (OPTABLE(i,j-1,6) - OPTABLE(i,j,6))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
+ !c = OPTABLE(i,j,6) - m*OPTABLE(i,j,3)
+ !kappa2 = m*ui_ + c
+ m = (OPTABLE(irho+1,iu,6) - OPTABLE(irho+1,iu+1,6))/(OPTABLE(irho+1,iu,3) - OPTABLE(irho+1,iu+1,3))
+ c = OPTABLE(irho+1,iu+1,6) - m*OPTABLE(irho+1,iu+1,3)
+ kappa2 = m*ui + c
 
- kappa2 = m*ui_ + c
+ !m = (OPTABLE(i,j-1,2) - OPTABLE(i,j,2))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
+ !c = OPTABLE(i,j,2) - m*OPTABLE(i,j,3)
+ !Tpart2 = m*ui_ + c
+ m = (OPTABLE(irho+1,iu,2) - OPTABLE(irho+1,iu+1,2))/(OPTABLE(irho+1,iu,3) - OPTABLE(irho+1,iu+1,3))
+ c = OPTABLE(irho+1,iu+1,2) - m*OPTABLE(irho+1,iu+1,3)
+ Tpart2 = m*ui + c
+ 
+ !m = (OPTABLE(i,j-1,4) - OPTABLE(i,j,4))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
+ !c = OPTABLE(i,j,4) - m*OPTABLE(i,j,3)
+ !gmw2 = m*ui_ + c
+ m = (OPTABLE(irho+1,iu,4) - OPTABLE(irho+1,iu+1,4))/(OPTABLE(irho+1,iu,3) - OPTABLE(irho+1,iu+1,3))
+ c = OPTABLE(irho+1,iu+1,4) - m*OPTABLE(irho+1,iu+1,3)
+ gmw2 = m*ui + c
 
- m = (OPTABLE(i,j-1,2) - OPTABLE(i,j,2))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
- c = OPTABLE(i,j,2) - m*OPTABLE(i,j,3)
+ !!*!! Question: why is this 1 and not j or iu? because it's the density column so it doesn't matter...?
+! m = (kappa2 - kappa1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
+ !c = kappa2 - m*OPTABLE(i,1,1)
+ !kappaPart = m*rhoi_ + c
+ m = (kappa2 - kappa1)/(OPTABLE(irho+1,1,1)-OPTABLE(irho,1,1))
+ c = kappa2 - m*OPTABLE(irho+1,1,1)
+ kappaPart = m*rhoi + c
 
- Tpart2 = m*ui_ + c
+! m = (kbar2 - kbar1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
+ !c = kbar2 - m*OPTABLE(i,1,1)
+ !kappaBar = m*rhoi_ + c
+ m = (kbar2 - kbar1)/(OPTABLE(irho+1,1,1)-OPTABLE(irho,1,1))
+ c = kbar2 - m*OPTABLE(irho+1,1,1)
+ kappaBar = m*rhoi + c
 
- m = (OPTABLE(i,j-1,4) - OPTABLE(i,j,4))/(OPTABLE(i,j-1,3) - OPTABLE(i,j,3))
- c = OPTABLE(i,j,4) - m*OPTABLE(i,j,3)
+! m = (Tpart2 - Tpart1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
+! c = Tpart2 - m*OPTABLE(i,1,1)
+ ! Ti = m*rhoi_ + c
+ m = (Tpart2 - Tpart1)/(OPTABLE(irho+1,1,1)-OPTABLE(irho,1,1))
+ c = Tpart2 - m*OPTABLE(irho+1,1,1)
+ Ti = m*rhoi + c
 
- gmw2 = m*ui_ + c
-
- m = (kappa2 - kappa1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
- c = kappa2 - m*OPTABLE(i,1,1)
-
- kappaPart = m*rhoi_ + c
-
- m = (kbar2 - kbar1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
- c = kbar2 - m*OPTABLE(i,1,1)
-
- kappaBar = m*rhoi_ + c
-
- m = (Tpart2 - Tpart1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
- c = Tpart2 - m*OPTABLE(i,1,1)
-
- Ti = m*rhoi_ + c
-
- m = (gmw2 - gmw1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
- c = gmw2 - m*OPTABLE(i,1,1)
-
- gmwi = m*rhoi_ + c
+! m = (gmw2 - gmw1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
+ !c = gmw2 - m*OPTABLE(i,1,1)
+ !gmwi = m*rhoi_ + c
+ m = (gmw2 - gmw1)/(OPTABLE(irho+1,1,1)-OPTABLE(irho,1,1))
+ c = gmw2 - m*OPTABLE(irho+1,1,1)
+ gmwi = m*rhoi + c
+ 
 end subroutine getopac_opdep
 
 subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
@@ -237,12 +288,12 @@ subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
 
  real u1, u2
  real m, c
- integer i, j
+ integer i, j,irho,itemp
  real rhoi_
 
- if (rhoi > OPTABLE(nx,1,1) .or. rhoi < OPTABLE(1,1,1)) then
+ if (rhoi > OPTABLE(nx-1,1,1) .or. rhoi < OPTABLE(1,1,1)) then
     call warning('getintenerg_opdep','rhoi out of range',var='rhoi',val=rhoi)
- elseif (Teqi > OPTABLE(1,ny,2) .or. Teqi < OPTABLE(1,1,2)) then
+ elseif (Teqi > OPTABLE(1,ny-1,2) .or. Teqi < OPTABLE(1,1,2)) then
     call warning('getintenerg_opdep','Ti out of range',var='Ti',val=Teqi)
  endif
 
@@ -255,6 +306,9 @@ subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
     rhoi_ = rhoi
  endif
 
+ irho = search_table(optable(:,1,1),nx,rhoi)
+ itemp = search_table(optable(irho,:,2),ny,Teqi)
+ 
  i = 2
  do while((OPTABLE(i,1,1) <= rhoi_).and.(i < nx))
     i = i + 1
@@ -265,28 +319,66 @@ subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
     j = j + 1
  enddo
 
+ if (irho+1 /= i) print *, "warning: irho, i", irho, i
 
- m = (OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))/(OPTABLE(i-1,j-1,2) - OPTABLE(i-1,j,2))
- c = OPTABLE(i-1,j,3) - m*OPTABLE(i-1,j,2)
-
+! m = (OPTABLE(i-1,j-1,3) - OPTABLE(i-1,j,3))/(OPTABLE(i-1,j-1,2) - OPTABLE(i-1,j,2))
+ !c = OPTABLE(i-1,j,3) - m*OPTABLE(i-1,j,2)
+ !u1 = m*Teqi + c
+ m = (OPTABLE(irho,itemp,3) - OPTABLE(irho,itemp+1,3))/(OPTABLE(irho,itemp,2) - OPTABLE(irho,itemp+1,2))
+ c = OPTABLE(irho,itemp+1,3) - m*OPTABLE(irho,itemp+1,2)
  u1 = m*Teqi + c
 
+ itemp = search_table(optable(irho+1,:,2),ny,Teqi)
  j = 2
  do while ((OPTABLE(i,j,2) <= Teqi).and.(j < ny))
     j = j + 1
  enddo
 
- m = (OPTABLE(i,j-1,3) - OPTABLE(i,j,3))/(OPTABLE(i,j-1,2) - OPTABLE(i,j,2))
- c = OPTABLE(i,j,3) - m*OPTABLE(i,j,2)
-
+ !m = (OPTABLE(i,j-1,3) - OPTABLE(i,j,3))/(OPTABLE(i,j-1,2) - OPTABLE(i,j,2))
+ !c = OPTABLE(i,j,3) - m*OPTABLE(i,j,2)
+ !u2 = m*Teqi + c
+ m = (OPTABLE(irho+1,itemp,3) - OPTABLE(irho+1,itemp+1,3))/&
+      (OPTABLE(irho+1,itemp,2) - OPTABLE(irho+1,itemp+1,2))
+ c = OPTABLE(irho+1,itemp+1,3) - m*OPTABLE(irho+1,itemp+1,2)
  u2 = m*Teqi + c
 
- m = (u2 - u1)/(OPTABLE(i,1,1)-OPTABLE(i-1,1,1))
- c = u2 - m*OPTABLE(i,1,1)
+ m = (u2 - u1)/(OPTABLE(irho+1,1,1)-OPTABLE(irho,1,1))
+ c = u2 - m*OPTABLE(irho+1,1,1)
 
- ueqi = m*rhoi_ + c
+ ueqi = m*rhoi + c
 end subroutine getintenerg_opdep
 
+!
+! Binary search given array
+!
+integer function search_table(array,arrlen,invalue) result(outind)
+  real,intent(in)    :: array(:),invalue
+  integer,intent(in) :: arrlen
+  integer            :: leftind,rightind,midind
+
+  leftind = 1; rightind = arrlen
+  do
+     if (rightind - leftind == 1 .or. rightind == leftind) then
+        outind = leftind
+        return
+     endif
+     midind = floor((rightind - leftind) / 2.) + leftind
+     if (invalue == array(midind) ) then
+        outind = midind
+        return
+     endif
+     if (invalue < array(midind)) then
+        rightind = midind
+     else
+        leftind = midind
+     endif
+  enddo
+
+end function search_table
+
+!
+! Calculate factor for FLD
+!
 subroutine get_k_fld(rhoi,eni,i,ki,Ti)
  use physcon,  only:c,fourpi
  use units,    only:unit_density,unit_ergg,unit_opacity,get_radconst_code
