@@ -30,7 +30,7 @@ module analysis
 
  ! Variables for radial binning
  integer :: nbins
- real    :: rin, rout,dr
+ real    :: rin,rout,dr,hlim
  integer, allocatable,dimension(:)   :: ipartbin
  real,    allocatable,dimension(:)   :: rad,ninbin,sigma,csbin,vrbin,vphibin, omega
  real,    allocatable,dimension(:)   :: H, toomre_q,epicyc,part_scaleheight,tcool
@@ -132,6 +132,7 @@ subroutine read_analysis_options
     call read_inopt(nbins,'nbins',db,errcount=nerr)
     call read_inopt(rin,'rin',db,errcount=nerr)
     call read_inopt(rout,'rout',db,errcount=nerr)
+    call read_inopt(hlim,'hlim',db,errcount=nerr)
     call close_db(db)
     if (nerr > 0) then
        call fatal(trim(analysistype),'Error in reading '//trim(inputfile))
@@ -144,6 +145,7 @@ subroutine read_analysis_options
     call prompt('Enter the number of radial bins: ', nbins)
     call prompt('Enter the disc inner radius: ', rin)
     call prompt('Enter the disc outer radius: ', rout)
+    call prompt('Enter scale height limit for averages: ', hlim) !from midplane
 
 ! Write choices to new inputfile
 
@@ -159,7 +161,8 @@ subroutine read_analysis_options
  print*, 'Inner Disc Radius (code units): ', rin
  print*, 'Outer Disc Radius (code units): ', rout
  print*, 'Number of bins: ', nbins
-
+ print*, 'Using particles of h <', hlim 
+ 
 end subroutine read_analysis_options
 
 
@@ -443,7 +446,9 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
        vphibin(ibin) = vphibin(ibin) + vphipart(ipart)
        omega(ibin) = omega(ibin) + vphipart(ipart)/rad(ibin)
        zsetgas(int(ninbin(ibin)),ibin) = xyzh(3,ipart)
-       tcool(ibin) = tcool(ibin) + vxyzu(4,ipart)/du_store(ipart)
+       if ( abs(xyzh(3,ipart)) < hlim*csi/(vphipart(ipart)/rad(ibin))) then ! include only particles < hlim
+          tcool(ibin) = tcool(ibin) + vxyzu(4,ipart)/du_store(ipart)
+       endif
     endif
 
  enddo
@@ -476,7 +481,6 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
  use units,   only: print_units, umass,udist,utime,unit_velocity,unit_density,unit_Bfield
  use dim,     only: gravity
  use part,    only: mhd,rhoh,alphaind,imu,itemp
- use eos,     only: ieos
 
  implicit none
 
@@ -510,10 +514,7 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
  call print_units
 
  sigma(:) = sigma(:)*umass/(udist*udist)
- if (ieos /= 24) then
-    csbin(:) = csbin(:)*unit_velocity
- endif
-
+ csbin(:) = csbin(:)*unit_velocity
  omega(:) = omega(:)/utime
 
  Keplog = 1.5
@@ -570,7 +571,7 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
     endif
 
     if (sigma(ibin)>0.0) then
-       toomre_q(ibin) = csbin(ibin)*omega(ibin)/(pi*gg*sigma(ibin))
+       toomre_q(ibin) = csbin(ibin)*epicyc(ibin)/(pi*gg*sigma(ibin))
     else
        toomre_q(ibin) = 1.0e30
     endif
