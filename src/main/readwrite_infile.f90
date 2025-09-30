@@ -28,6 +28,7 @@ module readwrite_infile
 !   - calc_erot          : *include E_rot in the ev_file*
 !   - curlv              : *output curl v in dump files*
 !   - cv_type            : *how to get cv and mean mol weight (0=constant,1=mesa)*
+!   - disc_viscosity     : *use cs, multiply by h/|rij| and apply to approaching/receding*
 !   - dtmax              : *time between dumps*
 !   - dtmax_dratio       : *dynamic dtmax: density ratio controlling decrease (<=0 to ignore)*
 !   - dtmax_max          : *dynamic dtmax: maximum allowed dtmax (=dtmax if <= 0)*
@@ -62,15 +63,15 @@ module readwrite_infile
 !   - tol_rad            : *tolerance on backwards Euler implicit solve of dxi/dt*
 !   - tolh               : *tolerance on h-rho iterations*
 !   - tolv               : *tolerance on v iterations in timestepping*
-!   - track_lum          : *write du/dt to dump files (for a B-grade lightcurve)*
+!   - track_lum          : *write du/dt to dump files (for a "lightcurve")*
 !   - twallmax           : *maximum wall time (hhh:mm, 000:00=ignore)*
 !   - use_mcfost         : *use the mcfost library*
 !   - xtol               : *tolerance on xyz iterations*
 !
 ! :Dependencies: HIIRegion, boundary_dyn, cooling, damping, dim, dust,
 !   dust_formation, eos, externalforces, forcing, gravwaveutils, growth,
-!   infile_utils, inject, io, linklist, metric, nicil_sup, options, part,
-!   porosity, ptmass, ptmass_radiation, radiation_implicit,
+!   infile_utils, inject, io, metric, neighkdtree, nicil_sup, options,
+!   part, porosity, ptmass, ptmass_radiation, radiation_implicit,
 !   radiation_utils, timestep, utils_apr, viscosity
 !
  use timestep,  only:dtmax_dratio,dtmax_max,dtmax_min
@@ -86,7 +87,7 @@ module readwrite_infile
  use part,      only:hfact,ien_type
  use io,        only:iverbose
  use dim,       only:do_radiation,nucleation,use_dust,use_dustgrowth,mhd_nonideal,compiled_with_mcfost,&
-                     inject_parts,curlv,driving,track_lum
+                     inject_parts,curlv,driving,track_lum,disc_viscosity
  implicit none
  logical :: incl_runtime2 = .false.
 
@@ -104,7 +105,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  use forcing,         only:write_options_forcing
  use externalforces,  only:write_options_externalforces
  use damping,         only:write_options_damping
- use linklist,        only:write_inopts_link
+ use neighkdtree,     only:write_inopts_tree
  use dust,            only:write_options_dust
  use growth,          only:write_options_growth
  use porosity,        only:write_options_porosity
@@ -187,7 +188,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
     call write_inopt(ptol,'ptol','tolerance on pmom iterations',iwritein)
  endif
 
- call write_inopts_link(iwritein)
+ call write_inopts_tree(iwritein)
 
  write(iwritein,"(/,a)") '# options controlling hydrodynamics, shock capturing'
  if (maxalpha==maxp .and. nalpha > 0) then
@@ -210,6 +211,9 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  endif
  if (gr) then
     call write_inopt(ireconav,'ireconav','use reconstruction in shock viscosity (-1=off,0=no limiter,1=Van Leer)',iwritein)
+ endif
+ if (disc_viscosity) then
+    call write_inopt(disc_viscosity,'disc_viscosity','use cs, multiply by h/|rij| and apply to approaching/receding',iwritein)
  endif
  call write_options_damping(iwritein)
 
@@ -254,10 +258,12 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
 
  call write_options_externalforces(iwritein,iexternalforce)
 
- write(iwritein,"(/,a)") '# options controlling physical viscosity'
- call write_inopt(irealvisc,'irealvisc','physical viscosity type (0=none,1=const,2=Shakura/Sunyaev)',iwritein)
- call write_inopt(shearparam,'shearparam','magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2)',iwritein)
- call write_inopt(bulkvisc,'bulkvisc','magnitude of bulk viscosity',iwritein)
+ if (.not. disc_viscosity) then
+    write(iwritein,"(/,a)") '# options controlling physical viscosity'
+    call write_inopt(irealvisc,'irealvisc','physical viscosity type (0=none,1=const,2=Shakura/Sunyaev)',iwritein)
+    call write_inopt(shearparam,'shearparam','magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2)',iwritein)
+    call write_inopt(bulkvisc,'bulkvisc','magnitude of bulk viscosity',iwritein)
+ endif
 
  if (driving) call write_options_forcing(iwritein)
  if (use_dust) call write_options_dust(iwritein)
@@ -286,7 +292,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
     call write_inopt(exchange_radiation_energy,'gas-rad_exchange','exchange energy between gas and radiation',iwritein)
     call write_inopt(limit_radiation_flux,'flux_limiter','limit radiation flux',iwritein)
     call write_inopt(iopacity_type,'iopacity_type','opacity method (0=inf,1=mesa,2=constant,-1=preserve)',iwritein)
-    if (iopacity_type == 1) then
+    if ((iopacity_type == 1) .and. (ieos/=20) ) then  ! for ieos=20, X, Z are already under EoS options
        call write_inopt(X_in,'X','hydrogen mass fraction for MESA opacity table',iwritein)
        call write_inopt(Z_in,'Z','metallicity for MESA opacity table',iwritein)
     elseif (iopacity_type == 2) then
@@ -299,16 +305,16 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
     endif
  endif
  if (gr) call write_options_metric(iwritein)
- call write_options_gravitationalwaves(iwritein)
  call write_options_boundary(iwritein)
 
  if (use_apr) call write_options_apr(iwritein)
 
  call write_options_H2R(iwritein)
 
- write(iwritein,"(/,a)") '# options wasting disk space'
+ write(iwritein,"(/,a)") '# optional outputs'
  call write_inopt(curlv,'curlv','output curl v in dump files',iwritein)
- call write_inopt(track_lum,'track_lum','write du/dt to dump files (for a B-grade lightcurve)',iwritein)
+ call write_inopt(track_lum,'track_lum','write du/dt to dump files (for a "lightcurve")',iwritein)
+ call write_options_gravitationalwaves(iwritein)
 
  if (iwritein /= iprint) close(unit=iwritein)
  if (iwritein /= iprint) write(iprint,"(/,a)") ' input file '//trim(infile)//' written successfully.'
@@ -329,7 +335,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
  use infile_utils,    only:read_next_inopt,contains_loop,write_infile_series
  use forcing,         only:read_options_forcing,write_options_forcing
  use externalforces,  only:read_options_externalforces
- use linklist,        only:read_inopts_link
+ use neighkdtree,     only:read_inopts_tree
  use dust,            only:read_options_dust
  use growth,          only:read_options_growth
  use options,         only:use_porosity
@@ -359,7 +365,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
  character(len=120) :: valstring
  integer :: ierr,ireaderr,line,idot,ngot,nlinesread
  real    :: ratio
- logical :: imatch,igotallrequired,igotallturb,igotalllink,igotloops
+ logical :: imatch,igotallrequired,igotallturb,igotalltree,igotloops
  logical :: igotallbowen,igotallcooling,igotalldust,igotallextern,igotallinject,igotallgrowth,igotallporosity
  logical :: igotallionise,igotallnonideal,igotalleos,igotallptmass,igotalldamping,igotallapr
  logical :: igotallprad,igotalldustform,igotallgw,igotallgr,igotallbdy,igotallH2R
@@ -378,7 +384,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
  igotalldust     = .true.
  igotallgrowth   = .true.
  igotallporosity = .true.
- igotalllink     = .true.
+ igotalltree     = .true.
  igotallextern   = .true.
  igotallinject   = .true.
  igotallapr      = .true.
@@ -488,6 +494,8 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
        read(valstring,*,iostat=ierr) overcleanfac
     case('beta')
        read(valstring,*,iostat=ierr) beta
+    case('disc_viscosity')
+       read(valstring,*,iostat=ierr) disc_viscosity
     case('ireconav')
        read(valstring,*,iostat=ierr) ireconav
     case('avdecayconst')
@@ -549,7 +557,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
        imatch = .false.
        if (.not.imatch) call read_options_externalforces(name,valstring,imatch,igotallextern,ierr,iexternalforce)
        if (.not.imatch .and. driving) call read_options_forcing(name,valstring,imatch,igotallturb,ierr)
-       if (.not.imatch) call read_inopts_link(name,valstring,imatch,igotalllink,ierr)
+       if (.not.imatch) call read_inopts_tree(name,valstring,imatch,igotalltree,ierr)
        !--Extract if one-fluid dust is used from the fileid
        if (.not.imatch .and. use_dust) call read_options_dust(name,valstring,imatch,igotalldust,ierr)
        if (.not.imatch .and. use_dustgrowth) call read_options_growth(name,valstring,imatch,igotallgrowth,ierr)
@@ -586,7 +594,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
  enddo
  close(unit=ireadin)
 
- igotallrequired = (ngot  >=  nrequired) .and. igotalllink   .and. igotallbowen   .and. igotalldust &
+ igotallrequired = (ngot  >=  nrequired) .and. igotalltree   .and. igotallbowen   .and. igotalldust &
                     .and. igotalleos    .and. igotallcooling .and. igotallextern  .and. igotallturb &
                     .and. igotallptmass .and. igotallinject  .and. igotallionise  .and. igotallnonideal &
                     .and. igotallgrowth  .and. igotallporosity .and. igotalldamping .and. igotallprad &
@@ -604,7 +612,7 @@ subroutine read_infile(infile,logfile,evfile,dumpfile)
           if (.not.igotalleos) write(*,*) 'missing equation of state options'
           if (.not.igotallcooling) write(*,*) 'missing cooling options'
           if (.not.igotalldamping) write(*,*) 'missing damping options'
-          if (.not.igotalllink) write(*,*) 'missing link options'
+          if (.not.igotalltree) write(*,*) 'missing tree options'
           if (.not.igotallbowen) write(*,*) 'missing Bowen dust options'
           if (.not.igotalldust) write(*,*) 'missing dust options'
           if (.not.igotallgr) write(*,*) 'missing metric parameters (eg, spin, mass)'

@@ -14,11 +14,13 @@ program phantomanalysis
 !
 ! :Usage: phantomanalysis dumpfile(s)
 !
-! :Dependencies: analysis, dim, eos, eos_stamatellos, externalforces,
+! :Dependencies: analysis, apr, dim, eos, eos_stamatellos, externalforces,
 !   fileutils, infile_utils, io, kernel, part, readwrite_dumps
+! :Dependencies: analysis, apr, dim, eos, externalforces, fileutils,
+!   infile_utils, io, kernel, part, readwrite_dumps
 !
- use dim,             only:tagline,do_nucleation,inucleation
- use part,            only:xyzh,hfact,massoftype,vxyzu,npart !,npartoftype
+ use dim,             only:tagline,do_nucleation,inucleation,use_apr
+ use part,            only:xyzh,hfact,massoftype,vxyzu,npart,apr_level !,npartoftype
  use io,              only:set_io_unit_numbers,iprint,idisk1,ievfile,ianalysis
  use readwrite_dumps, only:read_dump,read_smalldump,is_small_dump
  use infile_utils,    only:open_db_from_file,inopts,read_inopt,close_db
@@ -28,6 +30,7 @@ program phantomanalysis
  use eos_stamatellos, only:init_coolra,finish_coolra
  use kernel,          only:hfact_default
  use externalforces,  only:mass1,accradius1
+ use apr,             only:init_apr
  implicit none
  integer            :: nargs,iloc,ierr,iarg,i,idust_opacity
  real               :: time
@@ -48,6 +51,9 @@ program phantomanalysis
     print "(a)",' Usage: '//trim(basename(dumpfile))//' dumpfile(s)'
     stop
  endif
+
+ ! initialise apr if it is being used
+ if (use_apr) call init_apr(apr_level,ierr)
 
  print "(/,a,/)",' Phantom analysis ('//trim(analysistype)//'): You data, we analyse'
 

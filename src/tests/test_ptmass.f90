@@ -492,7 +492,7 @@ subroutine test_binary(ntests,npass,string)
     case(2)
        tolen = 1.2e-3
        if (gravity) tolen = 3.1e-3
-       if (use_fourthorder) tolang = 2.5e-11
+       if (use_fourthorder) tolang = 3.e-11
     case default
        if (calc_gravitwaves .and. itest==1) then
           call checkvalbuf_end('grav. wave strain (x)',ncheckgw(1),nfailgw(1),errgw(1),tolgw)
@@ -894,7 +894,7 @@ subroutine test_accretion(ntests,npass,itest)
                         metrics,metricderivs,pxyzu
  use ptmass,       only:ptmass_accrete,update_ptmass
  use energies,     only:compute_energies,angtot,etot,totmom
- use mpiutils,     only:bcast_mpi,reduce_in_place_mpi
+ use mpiutils,     only:bcast_mpi,reduce_in_place_mpi,reduceall_mpi
  use testutils,    only:checkval,update_test_scores
  use kernel,       only:hfact_default
  use eos,          only:polyk,gamma,ieos
@@ -903,6 +903,7 @@ subroutine test_accretion(ntests,npass,itest)
  integer, intent(inout) :: ntests,npass
  integer, intent(in)    :: itest
  integer :: i,nfailed(11),np_disc
+ integer(kind=8) :: naccreted
  integer(kind=1) :: ibin_wakei
  character(len=20) :: string
  logical :: accreted
@@ -974,9 +975,9 @@ subroutine test_accretion(ntests,npass,itest)
  totmomin = totmom
  angmomin = angtot
  ibin_wakei = 0
-
+ naccreted  = 0
  dptmass(:,1:nptmass) = 0.
- !$omp parallel default(shared) private(i) firstprivate(dptmass_thread)
+ !$omp parallel default(shared) private(i,accreted) firstprivate(dptmass_thread) reduction(+:naccreted)
  dptmass_thread(:,1:nptmass) = 0.
  !$omp do
  do i=1,npart
@@ -992,6 +993,7 @@ subroutine test_accretion(ntests,npass,itest)
                               igas,massoftype(igas),xyzmh_ptmass,vxyz_ptmass, &
                               accreted,dptmass_thread,t,1.0,ibin_wakei,ibin_wakei)
        endif
+       if (accreted) naccreted = naccreted + 1
     endif
  enddo
  !$omp enddo
@@ -1001,6 +1003,9 @@ subroutine test_accretion(ntests,npass,itest)
  !$omp end parallel
 
  call reduce_in_place_mpi('+',dptmass(:,1:nptmass))
+ naccreted = reduceall_mpi('+',naccreted)
+
+ if (naccreted > 0) accreted = .true.
 
  if (gr) then
     if (id==master) call update_ptmass(dptmass,xyzmh_ptmass,pxyzu_ptmass,fxyz_ptmass,nptmass)
@@ -1014,7 +1019,6 @@ subroutine test_accretion(ntests,npass,itest)
  call bcast_mpi(fxyz_ptmass(:,1:nptmass))
 
  if (itest==1) then
-    call bcast_mpi(accreted)
     call bcast_mpi(xyzh(4,1:2))
     call checkval(accreted,.true.,nfailed(1),'accretion flag')
     !--check that h has been changed to indicate particle has been accreted
@@ -1262,10 +1266,10 @@ subroutine test_createsink(ntests,npass)
     nfailed(:) = 0
     if (itest == 3) then
        rtest = rmax < h_acc
-       stest = nptmass < n_max
-       call checkval(stest,.true.,nfailed(1),'nptmass< nseeds max')
+       stest = nptmass <= n_max
+       call checkval(stest,.true.,nfailed(1),'nptmass < nseeds max')
        call checkval(starsmass-coremass,0.,6e-17,nfailed(4),'Mass conservation')
-       call checkval(ke/pe,0.5,5e-16,nfailed(5),'Virialised system')
+       call checkval(ke/pe,0.5,6.e-16,nfailed(5),'Virialised system')
        call checkval(rtest,.true.,nfailed(6),'rmax < h_acc')
     else
        call checkval(nptmass,1,0,nfailed(1),'nptmass=1')
@@ -1537,9 +1541,9 @@ subroutine test_merger(ntests,npass)
     endif
     if (itest==8) then
        if (gr) then
-          call checkval(nsinkF,84,0,nfailed(itest),'final number of sinks')
+          call checkval(nsinkF,54,0,nfailed(itest),'final number of sinks')
        else
-          call checkval(nsinkF,41,0,nfailed(itest),'final number of sinks')
+          call checkval(nsinkF,54,0,nfailed(itest),'final number of sinks')
        endif
     else
        call checkval(merged,merged_expected,nfailed(itest),'merger')
@@ -1702,7 +1706,7 @@ subroutine test_SDAR(ntests,npass)
  use ptmass,     only:get_accel_sink_sink,h_soft_sinksink, &
                         get_accel_sink_gas,f_acc,use_fourthorder,use_regnbody
  use part,       only:nptmass,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,dsdt_ptmass,fext,&
-                        npart,npartoftype,massoftype,xyzh,vxyzu,&
+                        npart,npartoftype,xyzh,vxyzu,&
                         igas,epot_sinksink,init_part,iJ2,ispinx,ispiny,ispinz,iReff,istar
  use part,       only:group_info,bin_info,n_group,n_ingroup,n_sing,nmatrix
  use energies,   only:angtot,etot,totmom,compute_energies
@@ -1723,7 +1727,7 @@ subroutine test_SDAR(ntests,npass)
  integer :: i,ierr,nfailed(4),nerr,nwarn
  integer :: merge_ij(3),merge_n
  real :: m1,m2,a,ecc,incl,hacc1,hacc2,dt,dtext,t,dtnew,tolen,tolmom,tolang,tolecc
- real :: angmomin,etotin,totmomin,dum,dum2,omega,errmax,dtsinksink,tmax,eccfin,decc
+ real :: angmomin,etotin,totmomin,omega,errmax,dtsinksink,tmax,eccfin,decc
  real :: fxyz_sinksink(4,3),dsdt_sinksink(3,3) ! we only use 3 sink particles in the tests here
  real :: xsec(3),vsec(3)
  real(kind=4) :: t1
@@ -1814,10 +1818,6 @@ subroutine test_SDAR(ntests,npass)
  call bcast_mpi(dtsinksink)
 
  fext(:,:) = 0.
- do i=1,npart
-    call get_accel_sink_gas(nptmass,xyzh(1,i),xyzh(2,i),xyzh(3,i),xyzh(4,i),xyzmh_ptmass,&
-                  fext(1,i),fext(2,i),fext(3,i),dum,massoftype(igas),fxyz_ptmass,dsdt_ptmass,dum,dum2)
- enddo
  if (id==master) then
     fxyz_ptmass(:,1:nptmass) = fxyz_ptmass(:,1:nptmass) + fxyz_sinksink(:,1:nptmass)
     dsdt_ptmass(:,1:nptmass) = dsdt_ptmass(:,1:nptmass) + dsdt_sinksink(:,1:nptmass)

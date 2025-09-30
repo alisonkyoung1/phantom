@@ -19,13 +19,12 @@ module radiation_implicit
 ! :Runtime parameters: None
 !
 ! :Dependencies: boundary, derivutils, dim, eos, implicit, io, kdtree,
-!   kernel, linklist, options, part, physcon, quartic, radiation_utils,
+!   kernel, neighkdtree, options, part, physcon, quartic, radiation_utils,
 !   timing, units
 !
  use part,            only:ikappa,ilambda,iedd,idkappa,iradxi,icv,ifluxx,ifluxy,ifluxz,igas,rhoh,massoftype,imu
- use eos,             only:iopacity_type
- use radiation_utils, only:get_kappa,get_1overmu
- use eos,             only:get_cv
+ use eos,             only:iopacity_type,get_cv,eos_outputs_mu
+ use radiation_utils, only:get_kappa
  implicit none
  integer, parameter :: ierr_failed_to_converge = 1,&
                        ierr_negative_opacity = 2, &
@@ -132,7 +131,7 @@ subroutine save_radiation_energies(npart,rad,xyzh,vxyzu,radprop,drad,origEU,save
     origEU(2,i) = vxyzu(4,i)
     if (save_cv) then
        rhoi = rhoh(xyzh(4,i),massoftype(igas))
-       radprop(icv,i) = get_cv(rhoi,vxyzu(4,i),cv_type)
+       radprop(icv,i) = get_cv(cv_type,rhoi,vxyzu(4,i))
        radprop(ikappa,i) = get_kappa(iopacity_type,vxyzu(4,i),radprop(icv,i),rhoi)
     endif
     drad(:,i) = 0.  ! Set dxi/dt = 0 for implicit scheme
@@ -181,7 +180,7 @@ subroutine do_radiation_onestep(dt,npart,rad,xyzh,vxyzu,radprop,origEU,EU0,faile
 
  ! check for errors
  if (ncompact <= 0 .or. ncompactlocal <= 0) then
-    call error('radiation_implicit','empty neighbour list - need to call set_linklist first?')
+    call error('radiation_implicit','empty neighbour list - need to call build_tree first?')
     ierr = ierr_neighbourlist_empty
     return
  endif
@@ -270,13 +269,13 @@ end subroutine do_radiation_onestep
 !+
 !---------------------------------------------------------
 subroutine get_compacted_neighbour_list(xyzh,ivar,ijvar,ncompact,ncompactlocal)
- use dim,      only:periodic,maxphase,maxp,maxpsph
- use linklist, only:ncells,get_neighbour_list,listneigh,ifirstincell
- use kdtree,   only:inodeparts,inoderange
- use boundary, only:dxbound,dybound,dzbound
- use part,     only:iphase,igas,iboundary,get_partinfo,isdead_or_accreted
- use kernel,   only:radkern2
- use io,       only:fatal
+ use dim,         only:periodic,maxphase,maxp,maxpsph
+ use neighkdtree, only:ncells,get_neighbour_list,listneigh,leaf_is_active
+ use kdtree,      only:inodeparts,inoderange
+ use boundary,    only:dxbound,dybound,dzbound
+ use part,        only:iphase,igas,iboundary,get_partinfo,isdead_or_accreted
+ use kernel,      only:radkern2
+ use io,          only:fatal
  real, intent(in)                  :: xyzh(:,:)
  integer, intent(out)              :: ivar(:,:),ijvar(:)
  integer, intent(out)              :: ncompact,ncompactlocal
@@ -300,16 +299,15 @@ subroutine get_compacted_neighbour_list(xyzh,ivar,ijvar,ncompact,ncompactlocal)
  icompact = 0
  icompactmax = size(ijvar)
  !$omp parallel do default(none) schedule(runtime)&
- !$omp shared(ncells,xyzh,inodeparts,inoderange,iphase,dxbound,dybound,dzbound,ifirstincell)&
+ !$omp shared(ncells,xyzh,inodeparts,inoderange,iphase,dxbound,dybound,dzbound,leaf_is_active)&
  !$omp shared(ivar,ijvar,ncompact,icompact,icompactmax,maxphase,maxp,maxpsph)&
  !$omp private(icell,i,j,k,n,ip,iactivei,iamgasi,iamdusti,iamtypei,dx,dy,dz,rij2,q2i,q2j)&
  !$omp private(hi,xi,yi,zi,hi21,hj1,ncompact_private,icompact_private,nneigh_trial,nneigh)
 
  over_cells: do icell=1,int(ncells)
-    i = ifirstincell(icell)
 
     !--skip empty cells AND inactive cells
-    if (i <= 0) cycle over_cells
+    if (leaf_is_active(icell) <= 0) cycle over_cells
 
     !
     !--get the neighbour list and fill the cell cache
@@ -455,7 +453,7 @@ subroutine fill_arrays(ncompact,ncompactlocal,npart,icompactmax,dt,xyzh,vxyzu,iv
 
        EU0(1,i) = rad(iradxi,i)
        EU0(2,i) = vxyzu(4,i)
-       EU0(3,i) = get_cv(rhoi,vxyzu(4,i),cv_type)
+       EU0(3,i) = get_cv(cv_type,rhoi,vxyzu(4,i))
        EU0(4,i) = get_kappa(iopacity_type,vxyzu(4,i),EU0(3,i),rhoi)
        !
        !--Diffuse ISM: Set dust temperature and opacity
@@ -495,7 +493,7 @@ subroutine fill_arrays(ncompact,ncompactlocal,npart,icompactmax,dt,xyzh,vxyzu,iv
           if (ind_timesteps) then
              EU0(1,j) = rad(iradxi,j)
              EU0(2,j) = vxyzu(4,j)
-             EU0(3,j) = get_cv(rhoj,vxyzu(4,j),cv_type)
+             EU0(3,j) = get_cv(cv_type,rhoj,vxyzu(4,j))
              EU0(4,j) = get_kappa(iopacity_type,vxyzu(4,j),EU0(3,j),rhoj)
           endif
 
@@ -993,7 +991,7 @@ subroutine update_gas_radiation_energy(ivar,vari,npart,ncompactlocal,&
        if (.not. iamtype(iphase(i))==iboundary) then
           EU0(1,i) = E1i
           EU0(2,i) = U1i
-          EU0(3,i) = get_cv(rhoi,U1i,cv_type)
+          EU0(3,i) = get_cv(cv_type,rhoi,U1i)
           EU0(4,i) = get_kappa(iopacity_type,U1i,EU0(3,i),rhoi)
        endif
 
@@ -1084,14 +1082,14 @@ subroutine set_heating_cooling_low_rhoT(i,eradi,ugasi,orig_eradi,orig_ugasi,cvi,
  if (.true.) then
     try_loop: do itry = 1,2
        u_found = ugasi  ! ugasi = EU0(2,i)
-       t_found = ugasi/get_cv(rhoi,u_found,cv_type)
+       t_found = ugasi/get_cv(cv_type,rhoi,u_found)
        t_orig = t_found
        do iterationloop = 1,100
           u_last = u_found
           t_last = t_found
 
           u_found = get_u_from_rhoT(rhoi,t_found,ieos)
-          cv1 = get_cv(rhoi,u_found,cv_type)
+          cv1 = get_cv(cv_type,rhoi,u_found)
           t_found = u_found/cv1
           !
           !--For calculating numerical derivative with gas temperature,
