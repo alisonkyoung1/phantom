@@ -2696,7 +2696,7 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
  use part,           only:Omega_k
  use io,             only:warning
  use physcon,        only:c,kboltz
- use eos_stamatellos, only:duSPH
+ use eos_stamatellos, only:duSPH,Gpot_cool
  integer,            intent(in)    :: icall
  type(cellforce),    intent(inout) :: cell
  real,               intent(inout) :: fxyzu(:,:)
@@ -2921,7 +2921,9 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
        fsum(ifzi) = fsum(ifzi) + fzi
        epoti = epoti + 0.5*pmassi*poti
        poten(i) = real(epoti,kind=kind(poten))
-       if ((icooling==9) .and. iamgasi) Gpot_cool(i) = Gpot_cool(i) + poti ! add contribution from distant nodes
+       if ((icooling==9) .and. iamgasi) then
+           Gpot_cool(i) = Gpot_cool(i) + poti ! add contribution from distant nodes
+       endif
        if (use_sinktree) then
           if (iamsinki) then
              fxyz_ptmass_tree(1,i-maxpsph) = fsum(ifxi) + fsum(ifskxi)

@@ -133,6 +133,8 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
  use io_summary,  only:summary_variable,iosumhup,iosumhdn
  use timing,      only:increment_timer,get_timings,itimer_dens_local,itimer_dens_remote
  use omputils,    only:omp_thread_num,omp_num_threads
+ use eos_stamatellos, only:doFLD,urad_FLD,lambda_FLD
+ use options,     only:icooling
 
  integer,      intent(in)    :: icall,npart,nactive
  integer(kind=1), intent(in) :: apr_level(:)
@@ -258,6 +260,8 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
 !$omp shared(cell_counters) &
 !$omp shared(thread_complete) &
 !$omp shared(ncomplete_mpi) &
+!$omp shared(icooling) &
+!$omp shared(lambda_FLD,urad_FLD,doFLD) &
 !$omp reduction(+:nlocal) &
 !$omp private(do_export) &
 !$omp private(ntotal) &
@@ -328,6 +332,9 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
     endif
 
     call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
+    if (icooling==9 .and. doFLD .and. icall==1) then
+       call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+    endif
     if (do_export) then
        call write_cell(stack_waiting,cell)
     else
@@ -360,6 +367,9 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
              endif
 
              call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
+             if (icooling==9 .and. doFLD) then
+                call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+             endif
 
              if (do_export) then
                 call write_cell(stack_waiting,cell)
@@ -430,6 +440,9 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
                                   cell_xpos=cell%xpos,cell_xsizei=cell%xsizei,cell_rcuti=cell%rcuti)
 
           call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
+          if (icooling==9 .and. doFLD) then
+             call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+          endif
           remote_export = .false.
           remote_export(cell%owner+1) = .true. ! use remote_export array to send back to the owner
 
@@ -490,6 +503,9 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
              call send_cell(cell,remote_export,irequestsend,xsendbuf,cell_counters,mpitype) ! send the cell to remote
 
              call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
+             if (icooling==9 .and. doFLD) then
+                call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+             endif
              call write_cell(stack_redo,cell)
           else
              call store_results(icall,cell,getdv,getdB,realviscosity,stressmax,xyzh,gradh,divcurlv, &
