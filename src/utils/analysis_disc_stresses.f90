@@ -42,7 +42,6 @@ module analysis
 
  logical :: write_neighbour_list = .true.  ! Write the neighbour list to file, if true
 
-
  private
 
 contains
@@ -61,7 +60,6 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
  character(len=9) :: output
  integer          :: ierr
 
-
  ! Code calculates the following alphas:
  ! Reynolds stress: 2*dvr*dvphi/3*cs^2
  ! Gravitational stress: gr*gphi/(4*pi*cs^2*Grho)
@@ -70,7 +68,6 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
 ! Print the analysis being done
  write(*,'("Performing analysis type ",A)') analysistype
  write(*,'("Input file name is ",A)') dumpfile
-
  write(output,"(a4,i5.5)") 'stresses_',numfile
  write(*,'("Output file name is ",A)') output
 
@@ -176,7 +173,6 @@ subroutine read_analysis_options
 
 end subroutine read_analysis_options
 
-
 !---------------------------------------------------
 !+
 ! Computes gravitational force vector from potential gradients
@@ -187,12 +183,11 @@ subroutine calc_gravitational_forces(dumpfile,npart,xyzh,vxyzu)
 
  use dim, only:gravity,maxp
  use part, only:poten,igas,iphase,maxphase,rhoh,massoftype,iamgas
- use kernel, only: get_kernel,get_kernel_grav1,cnormk
+ use kernel, only:get_kernel,get_kernel_grav1,cnormk
 
- character(len=*),intent(in) :: dumpfile
- real,intent(in) :: xyzh(:,:),vxyzu(:,:)
- integer,intent(in) :: npart
-
+ character(len=*), intent(in) :: dumpfile
+ real, intent(in) :: xyzh(:,:),vxyzu(:,:)
+ integer, intent(in) :: npart
 
  integer :: j,k,igrav,ipart
  real,dimension(3) :: dr
@@ -263,8 +258,6 @@ subroutine calc_gravitational_forces(dumpfile,npart,xyzh,vxyzu)
        rij = sqrt(rij2)
        dr(:) = dr(:)/rij
 
-
-
        ! r/h
        q2i = rij2*hj21
        qi = rij*hj1
@@ -300,7 +293,6 @@ subroutine calc_gravitational_forces(dumpfile,npart,xyzh,vxyzu)
 
 end subroutine calc_gravitational_forces
 
-
 !---------------------------------------------------
 !+
 ! Calculates cylindrical transformation for positions, forces and fields
@@ -308,11 +300,11 @@ end subroutine calc_gravitational_forces
 !---------------------------------------------------
 subroutine transform_to_cylindrical(npart,xyzh,vxyzu)
 
- use part, only: mhd,gravity,Bxyz
+ use part, only:mhd,gravity,Bxyz
  implicit none
 
  integer, intent(in) :: npart
- real,intent(in) ::xyzh(:,:),vxyzu(:,:)
+ real, intent(in) ::xyzh(:,:),vxyzu(:,:)
  integer :: ipart
 
  allocate(rpart(npart))
@@ -381,9 +373,9 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  use part,    only:rhoh,isdead_or_accreted
  use units,   only:utime
 
- integer,intent(in) :: npart
- real,intent(in) :: pmass
- real,intent(in) :: xyzh(:,:),vxyzu(:,:),eos_vars(:,:)
+ integer, intent(in) :: npart
+ real, intent(in) :: pmass
+ real, intent(in) :: xyzh(:,:),vxyzu(:,:),eos_vars(:,:)
 
  integer :: ibin,ipart,nbinned,iallocerr
  real :: area,csi
@@ -501,14 +493,13 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
 
 end subroutine radial_binning
 
-
 !--------------------------------------------------------------
 !+
 ! Calculates the disc stresses (alphas) and other radial quantities
 !+
 !--------------------------------------------------------------
 subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
- use physcon, only: pi,gg,kb_on_mh
+ use physcon, only:pi,gg,kb_on_mh
  use units,   only: print_units, umass,udist,utime,unit_velocity,unit_density,unit_Bfield
  use dim,     only: gravity
  use part,    only: mhd,rhoh,alphaind,imu,itemp
@@ -519,7 +510,6 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
  integer, intent(in) :: npart
  real,intent(in) :: xyzh(:,:),vxyzu(:,:)
  real,intent(in) :: pmass
-
  integer :: ibin,ipart
  real :: cs2, dvr,dvphi,Keplog,rhopart,unit_force,beta_sph,Hbin
  beta_sph = 2.

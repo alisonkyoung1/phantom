@@ -16,13 +16,16 @@ module analysis
 ! :Runtime parameters: None
 !
 ! :Dependencies: deriv, dim, energies, eos, growth, io, mcfost2phantom,
-!   omp_lib, options, part, physcon, units
+!   mcfost_utils, omp_lib, options, part, physcon, units
 !
  use omp_lib
 
  implicit none
  character(len=20), parameter, public :: analysistype = 'mcfost'
  public :: do_analysis
+
+ logical :: init_mcfost = .false.
+ logical :: isinitial = .true.
 
  private
 
@@ -37,14 +40,15 @@ subroutine do_analysis(dumpfile,num,xyzh,vxyzu,particlemass,npart,time,iunit)
                              get_ntypes,iamtype,maxphase,maxp,idust,nptmass,&
                              massoftype,xyzmh_ptmass,vxyz_ptmass,luminosity,igas,&
                              grainsize,graindens,ndusttypes,rad,radprop,&
-                             rhoh,ikappa,iradxi,ithick,inumph,drad,ivorcl,eos_vars,itemp
+                             rhoh,ikappa,iradxi,ithick,inumph,drad,ivorcl,eos_vars,itemp, apr_level
  use units,          only:umass,utime,udist,get_radconst_code
  use io,             only:fatal,iprint
- use dim,            only:use_dust,track_lum,maxdusttypes,use_dustgrowth,do_radiation
+ use dim,            only:use_dust,track_lum,maxdusttypes,use_dustgrowth,do_radiation, use_apr
  use eos,            only:temperature_coef,gmw,gamma
- use options,        only:use_dustfrac,use_mcfost,use_Voronoi_limits_file,Voronoi_limits_file, &
-                             use_mcfost_stellar_parameters, mcfost_computes_Lacc, mcfost_uses_PdV,&
-                             mcfost_keep_part, ISM, mcfost_dust_subl
+ use options,        only:use_dustfrac
+ use mcfost_utils,   only:use_mcfost,use_Voronoi_limits_file,Voronoi_limits_file, &
+                          use_mcfost_stellar_parameters,mcfost_computes_Lacc,mcfost_uses_PdV,&
+                          mcfost_keep_part,ISM,mcfost_dust_subl
  use physcon,        only:cm,gram,c,steboltz
 
  character(len=*), intent(in)    :: dumpfile
@@ -53,7 +57,6 @@ subroutine do_analysis(dumpfile,num,xyzh,vxyzu,particlemass,npart,time,iunit)
  real,             intent(in)    :: particlemass,time
  real,             intent(inout) :: vxyzu(:,:)
 
- logical, save   :: init_mcfost = .false., isinitial = .true.
  real            :: mu_gas,factor
  real(kind=4)    :: Tdust(npart),n_packets(npart)
  integer         :: ierr,ntypes,dustfluidtype,ilen,nlum,i,nerr
@@ -66,6 +69,7 @@ subroutine do_analysis(dumpfile,num,xyzh,vxyzu,particlemass,npart,time,iunit)
  logical, parameter :: write_T_files = .false. ! ask mcfost to write fits files with temperature structure
  character(len=len(dumpfile) + 20) :: mcfost_para_filename
  real :: a_code,rhoi,pmassi,Tmin,Tmax,default_kappa,kappa_diffusion
+ integer(kind=1), dimension(npart) :: new_level
 
  if (.not. use_mcfost) return
 
@@ -119,11 +123,17 @@ subroutine do_analysis(dumpfile,num,xyzh,vxyzu,particlemass,npart,time,iunit)
  endif
  factor = 1.0/(temperature_coef*gmw*(gamma-1))
 
+ if (use_apr) then
+     new_level = apr_level(1:npart)
+ else
+   new_level = 1
+ endif
+
  !-- calling mcfost to get Tdust
  call run_mcfost_phantom(npart,nptmass,ntypes,ndusttypes,dustfluidtype,&
          npartoftype,xyzh,vxyzu,itype,grainsize,graindens,dustfrac,massoftype,&
          xyzmh_ptmass,vxyz_ptmass,hfact,umass,utime,udist,nlum,dudt,compute_Frad,SPH_limits,Tdust,&
-         n_packets,mu_gas,ierr,write_T_files,ISM,eos_vars(itemp,:))
+         n_packets,mu_gas,ierr,write_T_files,ISM,eos_vars(itemp,:), new_level, use_apr)
 
  Tmin = minval(Tdust, mask=(Tdust > 1.))
  Tmax = maxval(Tdust)
