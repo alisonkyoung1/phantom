@@ -65,6 +65,7 @@ subroutine do_analysis(dumpfile,numfile,xyzh,vxyzu,pmass,npart,time,iunit)
  ! Gravitational stress: gr*gphi/(4*pi*cs^2*Grho)
  ! Maxwell stress: 2*-Br*Bphi/3(4*pi*rho*cs^2)
  ! Numerical stress:
+ 
 ! Print the analysis being done
  write(*,'("Performing analysis type ",A)') analysistype
  write(*,'("Input file name is ",A)') dumpfile
@@ -508,8 +509,9 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
  implicit none
 
  integer, intent(in) :: npart
- real,intent(in) :: xyzh(:,:),vxyzu(:,:)
- real,intent(in) :: pmass
+ real, intent(in) :: xyzh(:,:),vxyzu(:,:)
+ real, intent(in) :: pmass
+
  integer :: ibin,ipart
  real :: cs2, dvr,dvphi,Keplog,rhopart,unit_force,beta_sph,Hbin
  beta_sph = 2.

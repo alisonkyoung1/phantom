@@ -221,3 +221,13 @@ ifeq ($(SYSTEM), aocc)
 #  default settings for the AMD optimized fortran compiler (aocc)
    include Makefile_defaults_aocc
 endif
+
+ifeq ($(SYSTEM), appleM4)
+#   settings for the gfortran compiler on Apple Mac M2
+    include Makefile_defaults_gfortran
+	FFLAGS := $(FFLAGS:-O3=-O0)
+	FFLAGS := $(FFLAGS:-ftree-vectorize=-fno-tree-vectorize)
+	FFLAGS := $(FFLAGS:-funroll-loops=-fno-unroll-loops)
+	FFLAGS := $(FFLAGS:-finline-limit=1500=-fno-inline)
+    FFLAGS+= -fno-aggressive-loop-optimizations
+endif
