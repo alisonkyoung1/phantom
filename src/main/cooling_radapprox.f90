@@ -240,7 +240,7 @@ subroutine write_options_cooling_radapprox(iunit)
  !N.B. Tfloor handled in cooling.F90
  call write_inopt(eos_file,'EOS_file','File containing tabulated EOS values',iunit)
  call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
- call write_inopt(od_method,'OD method',&
+ call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
 end subroutine write_options_cooling_radapprox

@@ -27,7 +27,12 @@ contains
 subroutine run_test_stam(ntests,npass)
    integer,intent(inout) :: ntests,npass
    integer :: ierr,nfail(2)
+   logical :: got_phantom_dir
+   character(len=20) :: pdir
 
+   call get_environment_variable('PHANTOM_DIR',pdir)
+   got_phantom_dir = (len_trim(pdir) > 0)
+   if (.not. got_phantom_dir) return
    call read_optab(eos_file,ierr)
    nfail(:) = 0
    if (ierr .ne. 0) then
@@ -35,6 +40,7 @@ subroutine run_test_stam(ntests,npass)
    else
       call test_interp_optab(nfail(1),npass)
    endif
+   ntests = ntests + 1
    call update_test_scores(ntests,nfail(:),npass)
    call finish_test_stam
 end subroutine run_test_stam
@@ -44,11 +50,12 @@ subroutine test_interp_optab(nfail,npass)
    use eos, only:equationofstate
    use physcon, only:kb_on_mh
    integer,intent(out) :: nfail,npass
-   real(kind=8) :: logrhomin,logrhomax,logtmin,logtmax,tol,errmax
-   real(kind=8) :: dlogtemp,dlogrho,rhoi,Ti,ui,Tref,spsoundi
+   real :: logrhomin,logrhomax,logtmin,logtmax,tol,errmax
+   real :: dlogtemp,dlogrho,rhoi,Ti,ui,Tref,spsoundi
    integer  :: irho,itemp,ndiff,ncheck
-   real(kind=8) :: ponrhoi,xi,yi,zi,spsoundrefi,gammai
-   real(kind=8) :: kappaBar,kappaPart,mui
+   real:: ponrhoi,xi,yi,zi,spsoundrefi,gammai
+   real :: kappaBar,kappaPart,mui
+   real :: rhoi_cgs, ui_cgs
    character(len=30) :: label
    label = 'eos_stamatellos interpolation'
    xi = 0.; yi = 0.; zi = 0. !These aren't used but needed for eos call
@@ -68,7 +75,9 @@ subroutine test_interp_optab(nfail,npass)
          !print *, irho,itemp, rhoi, Ti
          call getintenerg_opdep(Ti,rhoi,ui)
          Tref = Ti
-         call equationofstate(24,ponrhoi,spsoundi,rhoi/unit_density,xi,yi,zi,Ti,ui/unit_ergg) !this calls getopac...
+         rhoi_cgs = rhoi/real(unit_density) ! to prevent compiler errors in equationofstate
+         ui_cgs = ui/real(unit_ergg)
+         call equationofstate(24,ponrhoi,spsoundi,rhoi_cgs,xi,yi,zi,Ti,ui_cgs) !this calls getopac...
          call getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,mui)
          gammai = 1. + (ponrhoi/(ui/unit_ergg))
          spsoundrefi = sqrt(gammai*kb_on_mh*Tref/mui)
