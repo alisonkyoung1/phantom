@@ -26,6 +26,7 @@ module analysis
  use getneighbours,    only:generate_neighbour_lists, read_neighbours, write_neighbours, &
                            neighcount,neighb,neighmax
  use eos_stamatellos,  only:du_store,tau_store
+ use part,             only:iTemp
  implicit none
  character(len=20), parameter, public :: analysistype = 'disc_stresses'
  public :: do_analysis, radial_binning, calc_gravitational_forces
@@ -34,10 +35,10 @@ module analysis
  integer :: nbins
  real    :: rin,rout,dr,hlim
  integer, allocatable,dimension(:)   :: ipartbin
- real,    allocatable,dimension(:)   :: rad,ninbin,sigma,csbin,vrbin,vphibin,omega
+ real,    allocatable,dimension(:)   :: rad,ninbin,sigma,csbin,vrbin,vphibin,omega,ninmid
  real,    allocatable,dimension(:)   :: H,toomre_q,epicyc,part_scaleheight,tcool,h_smooth
  real,    allocatable,dimension(:)   :: alpha_reyn,alpha_grav,alpha_mag,alpha_art,tau_midplane
- real,    allocatable,dimension(:)   :: rpart,phipart,vrpart,vphipart, gr,gphi,Br,Bphi
+ real,    allocatable,dimension(:)   :: rpart,phipart,vrpart,vphipart, gr,gphi,Br,Bphi,Tmid
  real,    allocatable,dimension(:,:) :: gravxyz,zsetgas
 
  logical :: write_neighbour_list = .true.  ! Write the neighbour list to file, if true
@@ -400,7 +401,9 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  allocate(part_scaleheight(nbins))
  allocate(tcool(nbins))
  allocate(h_smooth(nbins))
+ allocate(ninmid(nbins))
  allocate(tau_midplane(nbins))
+ allocate(Tmid(nbins))
 
  ipartbin(:) = 0
  ninbin(:) = 0.0
@@ -412,7 +415,9 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  part_scaleheight(:) = 0.0
  tcool(:) = 0.0
  h_smooth(:) = 0.
- tau_midplane(nbins) = 0.
+ ninmid(:) = 0.
+ tau_midplane(:) = 0.
+ Tmid(:) = 0.
 
  allocate(zsetgas(npart,nbins),stat=iallocerr)
  ! If you don't have enough memory to allocate zsetgas, then calculate H the slow way with less memory.
@@ -465,6 +470,8 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
              ! include only particles < hlim
              tcool(ibin) = tcool(ibin) + vxyzu(4,ipart)/du_store(ipart)
              tau_midplane(ibin) = tau_midplane(ibin) + tau_store(ipart)
+             Tmid(ibin) = Tmid(ibin) +  eos_vars(iTemp,ipart)
+             ninmid(ibin) = ninmid(ibin) + 1
           endif
        endif
     endif
@@ -483,10 +490,11 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
     h_smooth(:) = h_smooth(:)/ninbin(:)
  end where
  if (do_tcool) then
-    where(ninbin(:)/=0)
-       tcool(:) = tcool(:)/ninbin(:)
+    where(ninmid(:)/=0)
+       tcool(:) = tcool(:)/ninmid(:)
        tcool(:) = -tcool(:)*utime ! +ve tcool== cooling, -ve tcool==heating
-       tau_midplane(:) = tau_midplane(:)/ninbin(:)
+       tau_midplane(:) = tau_midplane(:)/ninmid(:)
+       Tmid(:) = Tmid(:)/ninmid(:)
     end where
  endif
 
@@ -646,7 +654,7 @@ subroutine write_radial_data(iunit,output,time)
  print '(a,a)', 'Writing to file ',output
  open(iunit,file=output)
  write(iunit,'("# Disc Stress data at t = ",es20.12)') time
- write(iunit,"('#',15(1x,'[',i2.2,1x,a11,']',2x))") &
+ write(iunit,"('#',16(1x,'[',i2.2,1x,a11,']',2x))") &
        1,'radius (AU)', &
        2,'sigma (cgs)', &
        3,'cs (cgs)', &
@@ -661,13 +669,14 @@ subroutine write_radial_data(iunit,output,time)
        12,'particle H (au)',&
        13,'t_cool',&
        14,'<h>', &
-       15,'tau'
+       15,'tau',&
+       16,'Tmid'
 
  do ibin=1,nbins
-    write(iunit,'(15(es18.10,1X))') rad(ibin),sigma(ibin),csbin(ibin), &
+    write(iunit,'(16(es18.10,1X))') rad(ibin),sigma(ibin),csbin(ibin), &
             omega(ibin),epicyc(ibin),H(ibin), abs(toomre_q(ibin)),alpha_reyn(ibin), &
             alpha_grav(ibin),alpha_mag(ibin),alpha_art(ibin),part_scaleheight(ibin),&
-            tcool(ibin),h_smooth(ibin),tau_midplane(ibin)
+            tcool(ibin),h_smooth(ibin),tau_midplane(ibin),Tmid(ibin)
  enddo
 
  close(iunit)
@@ -714,6 +723,8 @@ subroutine deallocate_arrays
  deallocate(part_scaleheight,h_smooth)
  if (allocated(tcool)) deallocate(tcool)
  if (allocated(tau_midplane)) deallocate(tau_midplane)
+ if (allocated(ninmid)) deallocate(ninmid)
+ deallocate(Tmid)
 
 end subroutine deallocate_arrays
 !-------------------------------------------------------
