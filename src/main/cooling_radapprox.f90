@@ -108,7 +108,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  use physcon,  only:steboltz,pi,solarl,kb_on_mh,piontwo,rpiontwo
  use units,    only:umass,udist,unit_density,unit_ergg,utime,unit_pressure
  use eos_stamatellos, only:getopac_opdep,getintenerg_opdep,gradP_cool,&
-      ttherm_store,ueqi_store,tau_store,du_store
+      ttherm_store,ueqi_store,tau_store,du_store,umin_store
  use eos_stamatellos, only:Gpot_cool,duFLD,doFLD
  use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp
  integer, intent(in) :: i
@@ -191,17 +191,19 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
 
  call getintenerg_opdep(Tmini4**(1.0/4.0),rhoi_cgs,umini)
  umini = umini/unit_ergg
+ umin_store(i) = umini ! code units
  opaci = (coldensi**2)*kappaBari + (1./kappaParti) ! physical units
- tau_store(i) = opaci
+ tau_store(i) = coldensi*kappaBari
  dudti_rad = 4.*steboltz*(Tmini4 - Ti**4)/opaci/unit_ergg*utime! code units
 
  if (doFLD) then
     du_tot = duhydro + du_FLDi
+    du_store(i) = dudti_rad + du_FLDi
  else
     du_tot = duhydro
+    du_store(i) = dudti_rad
  endif
 
- du_store(i) = dudti_rad
  Teqi = du_tot * opaci*unit_ergg/utime ! physical units
  Teqi = Teqi/4./steboltz
  Teqi = Teqi + Tmini4

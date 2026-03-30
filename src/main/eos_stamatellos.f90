@@ -21,7 +21,7 @@ module eos_stamatellos
  real, allocatable, public :: optable(:,:,:)
  real, allocatable, public :: gradP_cool(:)!gradP_cool=gradP/rho
  real, allocatable, public :: ttherm_store(:),ueqi_store(:),tau_store(:),du_store(:),duSPH(:)
- real, allocatable, public :: Gpot_cool(:),duFLD(:),lambda_FLD(:),urad_FLD(:)
+ real, allocatable, public :: Gpot_cool(:),duFLD(:),lambda_FLD(:),urad_FLD(:),umin_store(:)
  character(len=25), public :: eos_file= 'eos_lom.dat' !default name of tabulated EOS file
  logical, public :: doFLD = .True.
  logical, public :: floor_energy = .False.
@@ -53,6 +53,7 @@ subroutine init_coolra()
     call allocate_array('ttherm_store',ttherm_store,np)
     call allocate_array('ueqi_store',ueqi_store,np)
     call allocate_array('tau_store',tau_store,np)
+    call allocate_array('umin_store',umin_store,np)
     call allocate_array('du_store',du_store,np)
  endif
 
@@ -60,6 +61,7 @@ subroutine init_coolra()
  ueqi_store(:) = 0d0
  ttherm_store(:) = 0d0
  tau_store(:) = 0d0
+ umin_store(:) = 0d0
  du_store(:) = 0d0
  duSPH(:) = 0d0
  Gpot_cool(:) = 0d0
@@ -78,6 +80,7 @@ subroutine finish_coolra()
  if (allocated(ttherm_store)) deallocate(ttherm_store)
  if (allocated(ueqi_store)) deallocate(ueqi_store)
  if (allocated(tau_store)) deallocate(tau_store)
+ if (allocated(umin_store)) deallocate(umin_store)
  if (allocated(du_store)) deallocate(du_store)
  if (allocated(duSPH)) deallocate(duSPH)
  if (allocated(Gpot_cool)) deallocate(Gpot_cool)
