@@ -38,11 +38,10 @@ module analysis
  real,    allocatable,dimension(:)   :: rad,ninbin,sigma,csbin,vrbin,vphibin,omega,ninmid
  real,    allocatable,dimension(:)   :: H,toomre_q,epicyc,part_scaleheight,tcool,h_smooth
  real,    allocatable,dimension(:)   :: alpha_reyn,alpha_grav,alpha_mag,alpha_art,tau_midplane
- real,    allocatable,dimension(:)   :: rpart,phipart,vrpart,vphipart, gr,gphi,Br,Bphi,Tmid
+ real,    allocatable,dimension(:)   :: rpart,phipart,vrpart,vphipart, gr,gphi,Br,Bphi,Tmid,Tmin
  real,    allocatable,dimension(:,:) :: gravxyz,zsetgas
 
  logical :: write_neighbour_list = .true.  ! Write the neighbour list to file, if true
-
  private
 
 contains
@@ -150,7 +149,7 @@ subroutine read_analysis_options
     call prompt('Enter the disc inner radius: ', rin)
     call prompt('Enter the disc outer radius: ', rout)
     call prompt('Enter scale height limit for tcool averages: ', hlim) !from midplane
-
+    
 ! Write choices to new inputfile
 
     open(unit=iunit,file=inputfile,status='new',form='formatted')
@@ -374,13 +373,14 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  use eos,     only:get_spsound,ieos
  use part,    only:rhoh,isdead_or_accreted
  use units,   only:utime
-
+ use eos_stamatellos, only:du_store,umin_store
+ 
  integer, intent(in) :: npart
  real, intent(in) :: pmass
  real, intent(in) :: xyzh(:,:),vxyzu(:,:),eos_vars(:,:)
 
  integer :: ibin,ipart,nbinned,iallocerr
- real :: area,csi
+ real :: area,csi,tcooli,Tmini
  logical :: do_tcool
 
  print '(a,I4)', 'Carrying out radial binning, number of bins: ',nbins
@@ -404,6 +404,7 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  allocate(ninmid(nbins))
  allocate(tau_midplane(nbins))
  allocate(Tmid(nbins))
+ allocate(Tmin(nbins))
 
  ipartbin(:) = 0
  ninbin(:) = 0.0
@@ -418,6 +419,7 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  ninmid(:) = 0.
  tau_midplane(:) = 0.
  Tmid(:) = 0.
+ Tmin(:) = 0.
 
  allocate(zsetgas(npart,nbins),stat=iallocerr)
  ! If you don't have enough memory to allocate zsetgas, then calculate H the slow way with less memory.
@@ -468,9 +470,13 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
        if (do_tcool) then
           if (abs(xyzh(3,ipart)) < hlim*csi/(vphipart(ipart)/rad(ibin)) .and. abs(du_store(ipart)) > 0.) then
              ! include only particles < hlim
-             tcool(ibin) = tcool(ibin) + vxyzu(4,ipart)/du_store(ipart)
+!             tcooli = calc_tcooli(vxyzu(4,ipart),umin_store(ipart),du_store(ipart)) *utime
+             tcooli = vxyzu(4,ipart) / du_store(ipart)
+             tcool(ibin) = tcool(ibin) + tcooli
              tau_midplane(ibin) = tau_midplane(ibin) + tau_store(ipart)
              Tmid(ibin) = Tmid(ibin) +  eos_vars(iTemp,ipart)
+             Tmini = calc_Tmin(xyzh(4,ipart),pmass,umin_store(ipart))
+             Tmin(ibin) = Tmin(ibin) +  Tmini
              ninmid(ibin) = ninmid(ibin) + 1
           endif
        endif
@@ -491,10 +497,11 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  end where
  if (do_tcool) then
     where(ninmid(:)/=0)
-       tcool(:) = tcool(:)/ninmid(:)
-       tcool(:) = -tcool(:)*utime ! +ve tcool== cooling, -ve tcool==heating
+       tcool(:) = tcool(:) * utime /ninmid(:)
+       tcool(:) = -tcool(:) ! +ve tcool== cooling, -ve tcool==heating
        tau_midplane(:) = tau_midplane(:)/ninmid(:)
        Tmid(:) = Tmid(:)/ninmid(:)
+       Tmin(:) = Tmin(:)/ninmid(:)
     end where
  endif
 
@@ -546,9 +553,8 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
  call print_units
 
  sigma(:) = sigma(:)*umass/(udist*udist)
- !if (ieos /= 24) then
  csbin(:) = csbin(:)*unit_velocity
- !endif
+
 
  omega(:) = omega(:)/utime
 
@@ -582,6 +588,7 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
          + (beta_sph*0.04*h_smooth(ibin)*h_smooth(ibin)*udist*udist/Hbin/Hbin)
 
     if (gravity) alpha_grav(ibin) = alpha_grav(ibin) + gr(ipart)*gphi(ipart)/rhopart
+!    if (gravity) alpha_grav(ibin) = alpha_grav(ibin) + gr(ipart)*gphi(ipart)
     if (mhd) alpha_mag(ibin) = alpha_mag(ibin) + Br(ipart)*Bphi(ipart)/rhopart
 
  enddo
@@ -622,7 +629,10 @@ subroutine calc_stresses(npart,xyzh,vxyzu,pmass)
        alpha_reyn(ibin) = alpha_reyn(ibin)/(Keplog*cs2*ninbin(ibin))
        alpha_art(ibin) = alpha_art(ibin)/ninbin(ibin)
 
-       if (gravity) alpha_grav(ibin) = alpha_grav(ibin)/(Keplog*4.0*pi*gg*ninbin(ibin)*cs2)
+       if (gravity) then
+          alpha_grav(ibin) = alpha_grav(ibin)*udist*udist/(utime**4)
+          alpha_grav(ibin) = alpha_grav(ibin)/(Keplog*4.0*pi*gg*ninbin(ibin)*cs2)
+       endif
        if (mhd) alpha_mag(ibin) = alpha_mag(ibin)/(Keplog*cs2*ninbin(ibin))
     else
        alpha_reyn(ibin) = 0.0
@@ -654,7 +664,7 @@ subroutine write_radial_data(iunit,output,time)
  print '(a,a)', 'Writing to file ',output
  open(iunit,file=output)
  write(iunit,'("# Disc Stress data at t = ",es20.12)') time
- write(iunit,"('#',16(1x,'[',i2.2,1x,a11,']',2x))") &
+ write(iunit,"('#',17(1x,'[',i2.2,1x,a11,']',2x))") &
        1,'radius (AU)', &
        2,'sigma (cgs)', &
        3,'cs (cgs)', &
@@ -670,13 +680,14 @@ subroutine write_radial_data(iunit,output,time)
        13,'t_cool',&
        14,'<h>', &
        15,'tau',&
-       16,'Tmid'
+       16,'Tmid',&
+       17,'Tmin'
 
  do ibin=1,nbins
-    write(iunit,'(16(es18.10,1X))') rad(ibin),sigma(ibin),csbin(ibin), &
+    write(iunit,'(17(es18.10,1X))') rad(ibin),sigma(ibin),csbin(ibin), &
             omega(ibin),epicyc(ibin),H(ibin), abs(toomre_q(ibin)),alpha_reyn(ibin), &
             alpha_grav(ibin),alpha_mag(ibin),alpha_art(ibin),part_scaleheight(ibin),&
-            tcool(ibin),h_smooth(ibin),tau_midplane(ibin),Tmid(ibin)
+            tcool(ibin),h_smooth(ibin),tau_midplane(ibin),Tmid(ibin),Tmin(ibin)
  enddo
 
  close(iunit)
@@ -705,6 +716,22 @@ subroutine calculate_H(nbin,H,zsetgas,ninbin)
 
 end subroutine calculate_H
 
+!pure real function calc_tcooli(ugas,umin,du_rad) result(tcool)
+ ! real,intent(in) :: ugas,umin,du_rad
+  !tcool = (ugas - umin)/du_rad
+!end function calc_tcooli
+
+real function calc_Tmin(hi,pmass,umini) result(Tmini)
+  use units, only:unit_density,unit_ergg
+  use part, only:rhoh
+  use eos_stamatellos, only:getopac_opdep
+  real,intent(in) :: hi,pmass,umini
+  real :: rhoi_cgs,umini_cgs,kappaBar,kappaPart,gmwi
+  rhoi_cgs = rhoh(hi,pmass)*unit_density
+  umini_cgs = umini * unit_ergg
+  call getopac_opdep(umini_cgs,rhoi_cgs,kappaBar,kappaPart,Tmini,gmwi)
+end function calc_Tmin
+  
 !--------------------------------------------------------
 !+
 ! Deallocate arrays
@@ -724,7 +751,7 @@ subroutine deallocate_arrays
  if (allocated(tcool)) deallocate(tcool)
  if (allocated(tau_midplane)) deallocate(tau_midplane)
  if (allocated(ninmid)) deallocate(ninmid)
- deallocate(Tmid)
+ deallocate(Tmid,Tmin)
 
 end subroutine deallocate_arrays
 !-------------------------------------------------------
