@@ -282,8 +282,8 @@ end function search_table
 ! Calculate factor for FLD
 !
 subroutine get_k_fld(rhoi,eni,i,ki,Ti)
- use physcon,  only:c,fourpi
- use units,    only:unit_density,unit_ergg,unit_opacity,get_radconst_code
+ use physcon,  only:steboltz
+ use units,    only:unit_density,unit_ergg,umass,unit_energ,udist,utime
  real,intent(in)    :: rhoi,eni
  integer,intent(in) :: i
  real               :: kappaBar,gmwi,kappaPart,eni_ergg,rhoi_g
@@ -292,12 +292,14 @@ subroutine get_k_fld(rhoi,eni,i,ki,Ti)
  if (lambda_FLD(i) == 0d0) then
     ki = 0.
  else
+   ! cgs units
     eni_ergg = eni*unit_ergg
     rhoi_g = rhoi*unit_density
     call getopac_opdep(eni_ergg,rhoi_g,kappaBar,kappaPart,Ti,gmwi)
-   kappaPart = kappaPart/unit_opacity
-    ! steboltz constant = 4pi/c * arad
-    ki = 16d0*(fourpi/c)*get_radconst_code()*lambda_FLD(i)*Ti**3 /rhoi/kappaPart
+    ki = 16.0*steboltz *lambda_FLD(i)*Ti**3 /rhoi/kappaPart
+    ! convert to code units
+    ki = ki/(unit_energ/udist/utime)
+
     if (isnan(ki)) then
        print *, "WARNING k isnan, lambda_FLDi,Ti,rhoi,kappaPart", &
              lambda_FLD(i), Ti, rhoi,kappaPart

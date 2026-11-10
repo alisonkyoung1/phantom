@@ -1621,7 +1621,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                       diffterm = 4.*pmassj/rhoi/rhoj
                       diffterm = diffterm * kfldi * kfldj / (kfldi+kfldj)
                       diffterm = diffterm * (Ti - Tj) / rij2
-                      diffterm = diffterm*cnormk*grkerni*(runix*dx + runiy*dy + runiz*dz)
+                      diffterm = diffterm*0.5*(grkerni+grkernj)*(runix*dx + runiy*dy + runiz*dz)
                    endif
                    duFLD(i) = duFLD(i) + diffterm
                    if (isnan(duFLD(i))) then
