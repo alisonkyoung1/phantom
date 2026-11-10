@@ -470,8 +470,7 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
        if (do_tcool) then
           if (abs(xyzh(3,ipart)) < hlim*csi/(vphipart(ipart)/rad(ibin)) .and. abs(du_store(ipart)) > 0.) then
              ! include only particles < hlim
-!             tcooli = calc_tcooli(vxyzu(4,ipart),umin_store(ipart),du_store(ipart)) *utime
-             tcooli = vxyzu(4,ipart) / du_store(ipart)
+             tcooli = calc_tcooli(vxyzu(4,ipart),umin_store(ipart),du_store(ipart))
              tcool(ibin) = tcool(ibin) + tcooli
              tau_midplane(ibin) = tau_midplane(ibin) + tau_store(ipart)
              Tmid(ibin) = Tmid(ibin) +  eos_vars(iTemp,ipart)
@@ -498,7 +497,6 @@ subroutine radial_binning(npart,xyzh,vxyzu,pmass,eos_vars)
  if (do_tcool) then
     where(ninmid(:)/=0)
        tcool(:) = tcool(:) * utime /ninmid(:)
-       tcool(:) = -tcool(:) ! +ve tcool== cooling, -ve tcool==heating
        tau_midplane(:) = tau_midplane(:)/ninmid(:)
        Tmid(:) = Tmid(:)/ninmid(:)
        Tmin(:) = Tmin(:)/ninmid(:)
@@ -716,10 +714,10 @@ subroutine calculate_H(nbin,H,zsetgas,ninbin)
 
 end subroutine calculate_H
 
-!pure real function calc_tcooli(ugas,umin,du_rad) result(tcool)
- ! real,intent(in) :: ugas,umin,du_rad
-  !tcool = (ugas - umin)/du_rad
-!end function calc_tcooli
+pure real function calc_tcooli(ugas,umin,du_rad) result(tcool)
+  real,intent(in) :: ugas,umin,du_rad
+  tcool = -(ugas - umin)/du_rad
+end function calc_tcooli
 
 real function calc_Tmin(hi,pmass,umini) result(Tmini)
   use units, only:unit_density,unit_ergg
